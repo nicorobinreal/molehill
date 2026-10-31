@@ -1,10 +1,6 @@
 # molehill
 
-Mullvad WireGuard relays as an HTTP CONNECT proxy: each sticky session gets
-its own exit IP, chosen by country, and keeps it while it's in use.
-
-There is no auth. Keep both ports (proxy and management API) on an internal
-network.
+Mullvad over rotating connect proxy with sticky sessions and country support.
 
 ## Usage
 
