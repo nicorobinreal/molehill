@@ -6,71 +6,36 @@ its own exit IP, chosen by country, and keeps it while it's in use.
 There is no auth. Keep both ports (proxy and management API) on an internal
 network.
 
-## Requirements
+## Usage
 
-- Docker, with the container given `NET_ADMIN` and
-  `net.ipv4.conf.all.src_valid_mark=1`.
-- A Mullvad account and at least one **device**: a WireGuard private key
-  registered on the account plus the IPv4 address Mullvad assigned to it.
-  molehill never creates devices itself.
-
-## Getting a device
-
-Either use the WireGuard config generator on Mullvad's website and take
-`PrivateKey` and the IPv4 `Address` from the generated file, or use the API:
-
-1. Account number → access token:
+1. Register a WireGuard key on your Mullvad account (needs `wg`, `curl`, `jq`):
 
    ```sh
-   curl -s -X POST https://api.mullvad.net/auth/v1/token \
-     -H 'Content-Type: application/json' -d '{"account_number":"1234567890123456"}'
+   ACCOUNT=<your account number> && KEY=$(wg genkey) && \
+   TOKEN=$(curl -s -X POST https://api.mullvad.net/auth/v1/token -H 'Content-Type: application/json' \
+     -d "{\"account_number\":\"$ACCOUNT\"}" | jq -r .access_token) && \
+   IPV4=$(curl -s -X POST https://api.mullvad.net/accounts/v1/devices -H "Authorization: Bearer $TOKEN" \
+     -H 'Content-Type: application/json' -d "{\"pubkey\":\"$(echo "$KEY" | wg pubkey)\",\"hijack_dns\":false}" \
+     | jq -r .ipv4_address)
    ```
 
-   Returns `{"access_token":"mva_...","expiry":"..."}`.
-
-2. Register your own key (`wg genkey | tee priv | wg pubkey`):
+2. Build and run the image:
 
    ```sh
-   curl -s -X POST https://api.mullvad.net/accounts/v1/devices \
-     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-     -d '{"pubkey":"<public key>","hijack_dns":false}'
+   docker build -t molehill https://github.com/nicorobinreal/molehill.git#v0.1.0 && \
+   docker run -d --name molehill --cap-add NET_ADMIN --sysctl net.ipv4.conf.all.src_valid_mark=1 \
+     -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 \
+     -e MULLVAD_DEVICES="[{\"id\":\"d1\",\"private_key\":\"$KEY\",\"ipv4\":\"$IPV4\"}]" molehill
    ```
 
-   The response includes `ipv4_address`. The private key plus that address is
-   the device. `GET` on the same URL lists devices, `DELETE .../devices/{id}`
-   removes one.
+3. Send a request through a session named `s1` exiting in the US:
 
-## Quick start
+   ```sh
+   curl -x 'http://session-s1-cc-us:x@localhost:8080' https://am.i.mullvad.net/json
+   ```
 
-```yaml
-services:
-  molehill:
-    build: https://github.com/nicorobinreal/molehill.git#v0.1.0
-    image: molehill:v0.1.0
-    restart: unless-stopped
-    cap_add: [NET_ADMIN]
-    sysctls:
-      net.ipv4.conf.all.src_valid_mark: 1
-    environment:
-      MULLVAD_DEVICES: '[{"id":"d1","private_key":"<private key>","ipv4":"10.64.1.2"}]'
-    ports:
-      - "127.0.0.1:8080:8080" # CONNECT proxy
-      - "127.0.0.1:8081:8081" # management API
-    volumes:
-      - molehill-data:/data
-
-volumes:
-  molehill-data:
-```
-
-Then send a request through a session named `s1` exiting in Sweden:
-
-```sh
-curl -x 'http://session-s1-cc-se:x@localhost:8080' https://am.i.mullvad.net/json
-```
-
-Usage, configuration, response codes and the management API are in
-[docs.md](docs.md).
+The full reference (username format, configuration, response codes,
+behavior, management API) is in [docs.md](docs.md).
 
 ## License
 
