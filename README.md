@@ -1,6 +1,6 @@
 # molehill
 
-Mullvad over rotating connect proxy with sticky sessions and country support.
+Mullvad as a rotating connect proxy with sticky sessions and country support.
 
 ## Usage
 
